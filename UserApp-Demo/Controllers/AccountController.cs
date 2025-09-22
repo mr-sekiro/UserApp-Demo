@@ -18,5 +18,15 @@ namespace UserApp_Demo.Controllers
         {
             return View();
         }
+        [HttpGet]
+        public IActionResult VerifyEmail()
+        {
+            return View();
+        }
+        [HttpGet]
+        public IActionResult ChangePassword()
+        {
+            return View();
+        }
     }
 }
