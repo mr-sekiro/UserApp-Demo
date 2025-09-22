@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using UserApp_Demo.Data;
 using UserApp_Demo.Models;
+using UserApp_Demo.Services;
 
 namespace UserApp_Demo
 {
@@ -27,7 +28,9 @@ namespace UserApp_Demo
             })
                 .AddEntityFrameworkStores<AppDbContext>()
                 .AddDefaultTokenProviders();
-            
+
+            builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
+            builder.Services.AddTransient<IEmailService, EmailService>();
 
             var app = builder.Build();
 

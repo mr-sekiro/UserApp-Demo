@@ -3,10 +3,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using System.Net.Mail;
 using UserApp_Demo.Models;
+using UserApp_Demo.Services;
 using UserApp_Demo.ViewModels;
 namespace UserApp_Demo.Controllers
 {
-    public class AccountController(SignInManager<User> _signInManager, UserManager<User> _userManager) : Controller
+    public class AccountController(SignInManager<User> _signInManager, UserManager<User> _userManager, IEmailService _emailService) : Controller
     {
         [HttpGet]
         public IActionResult Login()
@@ -76,10 +77,71 @@ namespace UserApp_Demo.Controllers
         {
             return View();
         }
+        public async Task<IActionResult> VerifyEmail(VerifyEmailViewModel model)
+        {
+            if (ModelState.IsValid)
+            {
+                var user = await _userManager.FindByEmailAsync(model.Email);
+                if (user != null)
+                {
+                    var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+                    var resetLink = Url.Action("ChangePassword", "Account", new { model.Email, Token = resetToken }, Request.Scheme);
+                    var Subject = "Reset Password";
+                    var Body = $"Please reset your password by clicking here: <a href='{resetLink}'>Reset Password</a>";
+                    await _emailService.SendEmailAsync(model.Email, Subject, Body);
+                    return RedirectToAction("EmailSent", "Account");
+                }
+
+                else
+                {
+                    ModelState.AddModelError("", "User not found!");
+                    return View(model);
+                }
+            }
+            return View(model);
+        }
         [HttpGet]
-        public IActionResult ChangePassword()
+        public IActionResult EmailSent()
         {
             return View();
+        }
+        [HttpGet]
+        public IActionResult ChangePassword(string Email, string Token)
+        {
+            if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Token))
+                return RedirectToAction("VerifyEmail", "Account");
+            var model = new ChangePasswordViewModel
+            {
+                Email = Email,
+                Token = Token
+            };
+            return View(model);
+        }
+        [HttpPost]
+        public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
+        {
+            if (ModelState.IsValid)
+            {
+                var user = await _userManager.FindByEmailAsync(model.Email);
+                if (user == null)
+                {
+                    ModelState.AddModelError("", "User not found!");
+                    return View(model);
+                }
+                var resetResult = await _userManager.ResetPasswordAsync(user, model.Token, model.NewPassword);
+                if (!resetResult.Succeeded)
+                {
+                    foreach (var error in resetResult.Errors)
+                    {
+                        ModelState.AddModelError("", error.Description);
+                    }
+                }
+                else
+                {
+                    return RedirectToAction("Login", "Account");
+                }
+            }
+            return View(model);
         }
     }
 }
