@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using System.Net.Mail;
@@ -58,7 +60,19 @@ namespace UserApp_Demo.Controllers
 
                 var result = await _userManager.CreateAsync(user, model.Password);
                 if (result.Succeeded)
-                    return RedirectToAction("Login", "Account");
+                {
+                    var otp = new Random().Next(100000, 999999).ToString();
+                    user.EmailOtp = otp;
+                    user.OtpExpiryTime = DateTime.UtcNow.AddMinutes(5); // valid for 5 mins
+                    await _userManager.UpdateAsync(user);
+
+                    // Send OTP via Email
+                    await _emailService.SendEmailAsync(user.Email, "Email Confirmation OTP",
+                        $"Your confirmation code is: <b>{otp}</b>. It will expire in 5 minutes.");
+
+                    return RedirectToAction("VerifyEmailOtp", new { email = user.Email });
+                }
+
                 else
                 {
                     foreach (var error in result.Errors)
@@ -71,6 +85,45 @@ namespace UserApp_Demo.Controllers
             return View(model);
 
 
+        }
+        [HttpGet]
+        public IActionResult VerifyEmailOtp(string email)
+        {
+            ViewBag.Email = email;
+            return View();
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> VerifyEmailOtp(string email, VerfiyEmailOTPViewModel model)
+        {
+            ViewBag.Email = email;
+            if (ModelState.IsValid)
+            {
+                var user = await _userManager.FindByEmailAsync(email);
+                if (user != null)
+                {
+                    if (user.EmailOtp == model.OTP && user.OtpExpiryTime > DateTime.UtcNow)
+                    {
+                        user.EmailConfirmed = true;
+                        user.EmailOtp = null;
+                        user.OtpExpiryTime = null;
+
+                        await _userManager.UpdateAsync(user);
+
+                        return RedirectToAction("ConfirmEmailSuccess");
+                    }
+
+                    ModelState.AddModelError("", "Invalid or expired OTP");
+                    return View();
+                }
+
+                else
+                {
+                    ModelState.AddModelError("", "User not found!");
+                    return View(model);
+                }
+            }
+            return View(model);
         }
         [HttpGet]
         public IActionResult VerifyEmail()
@@ -99,6 +152,11 @@ namespace UserApp_Demo.Controllers
                 }
             }
             return View(model);
+        }
+        [HttpGet]
+        public IActionResult ConfirmEmailSuccess() 
+        {
+            return View();
         }
         [HttpGet]
         public IActionResult EmailSent()
